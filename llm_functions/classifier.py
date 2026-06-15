@@ -4,41 +4,105 @@ from langchain_core.prompts import PromptTemplate
 from config.config import llm_caller
 
 
+# ==========================================================
+# STRUCTURED OUTPUT
+# ==========================================================
+
 class DomainClassificationOutput(BaseModel):
-    domain: Literal["HEALTHCARE", "ENGINEERING"] = Field(
-        description="The detected domain of the text. Either 'HEALTHCARE' or 'ENGINEERING'."
+
+    domain: Literal[
+        "HEALTHCARE",
+        "ENGINEERING"
+    ] = Field(
+        description="Predicted domain."
     )
+
+    confidence: float = Field(
+        description="Confidence score between 0.0 and 1.0."
+    )
+
+    reason: str = Field(
+        description="Reason for selecting the domain."
+    )
+
+
+# ==========================================================
+# DOMAIN CLASSIFIER
+# ==========================================================
 
 def classify_domain(state_partial):
     """
-    Uses an LLM to classify a given text as HEALTHCARE or ENGINEERING
-    and returns structured output with reasoning.
+    Classifies a query into either:
+
+    - HEALTHCARE
+    - ENGINEERING
+
+    Returns:
+    {
+        domain,
+        confidence,
+        reason
+    }
     """
 
     domain_prompt = PromptTemplate.from_template(
         """
-        You are an expert domain classifier that categorizes text into one of two fields:
-        - HEALTHCARE: topics related to medicine, patients, doctors, hospitals, diseases, treatments, diagnostics, etc.
-        - ENGINEERING: topics related to design, systems, software, mechanical, civil, electrical, or industrial engineering.
+You are an expert domain classifier.
 
-        SECURITY RULES:
-        - You must not invent new domains.
-        - Always choose exactly one domain: HEALTHCARE or ENGINEERING.
+You MUST classify the text into exactly one domain.
 
-        INPUT TEXT:
-        {snippet_text}
+AVAILABLE DOMAINS
 
-        TASK:
-        Determine whether the above text belongs to HEALTHCARE or ENGINEERING.
+1. HEALTHCARE
+   Examples:
+   - Diseases
+   - Treatments
+   - Hospitals
+   - Patients
+   - Doctors
+   - Medicine
+   - Medical diagnosis
+   - Clinical reports
+   - Healthcare systems
 
-        Respond **strictly** in this JSON format:
-        {{
-            "domain": "HEALTHCARE" or "ENGINEERING",
-        }}
-        """
+2. ENGINEERING
+   Examples:
+   - Software development
+   - Programming
+   - Artificial Intelligence
+   - Machine Learning
+   - Networking
+   - Mechanical engineering
+   - Electrical engineering
+   - Civil engineering
+   - System design
+
+RULES
+
+- Choose ONLY one domain.
+- Do not invent new domains.
+- Return confidence between 0 and 1.
+- Explain why the selected domain is most appropriate.
+
+INPUT TEXT
+
+{snippet_text}
+"""
     )
+
     llm = llm_caller()
-    structured_llm_router = llm.with_structured_output(DomainClassificationOutput)
-    classification_chain = domain_prompt | structured_llm_router
-    parsed = classification_chain.invoke(state_partial)
-    return parsed
+
+    structured_llm = llm.with_structured_output(
+        DomainClassificationOutput
+    )
+
+    classification_chain = (
+        domain_prompt
+        | structured_llm
+    )
+
+    result = classification_chain.invoke(
+        state_partial
+    )
+
+    return result
